@@ -1071,9 +1071,12 @@ function App() {
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      // 获取当前分类下的所有链接
+      // 获取当前分类下的所有链接（包括子分类）
+      const subCategoryIds = categories.filter(c => c.parentId === selectedCategory).map(c => c.id);
       const categoryLinks = links.filter(link => 
-        selectedCategory === 'all' || link.categoryId === selectedCategory
+        selectedCategory === 'all' || 
+        link.categoryId === selectedCategory || 
+        subCategoryIds.includes(link.categoryId)
       );
       
       // 找到被拖拽元素和目标元素的索引
