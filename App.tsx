@@ -1316,12 +1316,29 @@ function App() {
   // --- Category Management & Security ---
 
   const handleCategoryClick = (cat: Category) => {
-      // If category has password and is NOT unlocked
-      if (cat.password && !unlockedCategoryIds.has(cat.id)) {
-          setCatAuthModalData(cat);
+      // 检查当前分类或其父分类是否设置了密码且未解锁
+      const getLockedAncestor = (category: Category): Category | null => {
+          // 如果当前分类有密码且未解锁，返回当前分类
+          if (category.password && !unlockedCategoryIds.has(category.id)) {
+              return category;
+          }
+          // 如果有父分类，递归检查父分类
+          if (category.parentId) {
+              const parent = categories.find(c => c.id === category.parentId);
+              if (parent) {
+                  return getLockedAncestor(parent);
+              }
+          }
+          return null;
+      };
+
+      const lockedAncestor = getLockedAncestor(cat);
+      if (lockedAncestor) {
+          setCatAuthModalData(lockedAncestor);
           setSidebarOpen(false);
           return;
       }
+      
       setSelectedCategory(cat.id);
       setSidebarOpen(false);
   };
@@ -1676,11 +1693,20 @@ function App() {
 
   // --- Filtering & Memo ---
 
-  // Helper to check if a category is "Locked" (Has password AND not unlocked)
-  const isCategoryLocked = (catId: string) => {
+  // Helper to check if a category is "Locked" (Has password AND not unlocked, or its parent is locked)
+  const isCategoryLocked = (catId: string): boolean => {
       const cat = categories.find(c => c.id === catId);
-      if (!cat || !cat.password) return false;
-      return !unlockedCategoryIds.has(catId);
+      if (!cat) return false;
+      
+      // 检查当前分类是否锁定
+      if (cat.password && !unlockedCategoryIds.has(catId)) return true;
+      
+      // 如果有父分类，递归检查父分类是否锁定
+      if (cat.parentId) {
+          return isCategoryLocked(cat.parentId);
+      }
+      
+      return false;
   };
 
   const pinnedLinks = useMemo(() => {
@@ -2160,18 +2186,21 @@ function App() {
                         <div className="px-4 py-1 mb-1 border-b border-slate-100 dark:border-slate-700">
                           <span className="font-bold text-slate-400 uppercase tracking-widest" style={{ fontSize: '13px' }}>{cat.name} / 二级分类</span>
                         </div>
-                        {subCats.map(subCat => (
-                          <button
-                            key={subCat.id}
-                            onClick={() => { setSelectedCategory(subCat.id); setSidebarOpen(false); }}
-                            className={`w-full flex items-center gap-3 px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left ${
-                              selectedCategory === subCat.id ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-slate-600 dark:text-slate-400'
-                            }`}
-                          >
-                            <Icon name={subCat.icon} size={14} />
-                            <span className="text-sm truncate">{subCat.name}</span>
-                          </button>
-                        ))}
+                        {subCats.map(subCat => {
+                          const isSubLocked = isCategoryLocked(subCat.id);
+                          return (
+                            <button
+                              key={subCat.id}
+                              onClick={() => handleCategoryClick(subCat)}
+                              className={`w-full flex items-center gap-3 px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-left ${
+                                selectedCategory === subCat.id ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-slate-600 dark:text-slate-400'
+                              }`}
+                            >
+                              {isSubLocked ? <Lock size={14} className="text-amber-500" /> : <Icon name={subCat.icon} size={14} />}
+                              <span className="text-sm truncate">{subCat.name}</span>
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -2227,7 +2256,7 @@ function App() {
                  title="Fork this project on GitHub"
                >
                  <GitFork size={14} />
-                 <span>Fork 项目 v1.8.1</span>
+                 <span>Fork 项目 v1.8.2</span>
                </a>
             </div>
         </div>
@@ -2583,7 +2612,7 @@ function App() {
                                         <div className="flex items-center gap-2">
                                           <Icon name={primaryCat.icon} size={20} className="text-blue-500" />
                                           <button 
-                                            onClick={() => setSelectedCategory(primaryCat.id)}
+                                            onClick={() => handleCategoryClick(primaryCat)}
                                             className={`hover:text-blue-600 transition-colors ${selectedCategory === primaryCat.id ? 'text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400 font-medium'}`}
                                           >
                                             {primaryCat.name}
@@ -2598,14 +2627,17 @@ function App() {
                                               {subCats.map(sub => (
                                                 <button
                                                   key={sub.id}
-                                                  onClick={() => setSelectedCategory(sub.id)}
+                                                  onClick={() => handleCategoryClick(sub)}
                                                   className={`text-sm whitespace-nowrap transition-all relative py-1 ${
                                                     selectedCategory === sub.id 
                                                       ? 'text-blue-600 dark:text-blue-400 font-bold' 
                                                       : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 font-medium'
                                                   }`}
                                                 >
-                                                  {sub.name}
+                                                  <div className="flex items-center gap-1">
+                                                    {sub.name}
+                                                    {isCategoryLocked(sub.id) && <Lock size={12} className="text-amber-500" />}
+                                                  </div>
                                                   {selectedCategory === sub.id && (
                                                     <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 rounded-full animate-in fade-in zoom-in duration-300" />
                                                   )}
